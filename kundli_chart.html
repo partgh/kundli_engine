@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>🕉️ North Indian Kundli Chart</title>
+<style>
+  body {
+    font-family: "Segoe UI", sans-serif;
+    background: #eef3fb;
+    text-align: center;
+    padding: 25px;
+  }
+
+  h2 {
+    color: #142c52;
+    font-size: 26px;
+    margin-bottom: 12px;
+  }
+
+  button {
+    background: #142c52;
+    color: #fff;
+    padding: 10px 18px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 25px;
+    font-size: 15px;
+  }
+
+  button:hover { background: #25497a; }
+
+  canvas {
+    border: 3px solid #142c52;
+    background: #fff;
+    box-shadow: 0 0 15px rgba(0,0,0,0.1);
+  }
+
+  #result {
+    margin-top: 20px;
+    width: 540px;
+    margin-left: auto;
+    margin-right: auto;
+    text-align: left;
+    font-family: monospace;
+    background: #0c1522;
+    color: #00ff99;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+
+<h2>🪐 North Indian Kundli Chart Viewer</h2>
+<button id="load">Load Kundli</button>
+<br>
+<canvas id="kundliCanvas" width="520" height="520"></canvas>
+
+<div id="result">Waiting for Kundli data...</div>
+
+<script>
+const canvas = document.getElementById("kundliCanvas");
+const ctx = canvas.getContext("2d");
+const result = document.getElementById("result");
+const button = document.getElementById("load");
+
+// 🔷 Draw full diamond chart (pure North Indian style)
+function drawDiamond() {
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.strokeStyle = "#142c52";
+  ctx.lineWidth = 2;
+
+  // Outer diamond
+  ctx.beginPath();
+  ctx.moveTo(w / 2, 10);         // Top tip
+  ctx.lineTo(w - 10, h / 2);     // Right tip
+  ctx.lineTo(w / 2, h - 10);     // Bottom tip
+  ctx.lineTo(10, h / 2);         // Left tip
+  ctx.closePath();
+  ctx.stroke();
+
+  // 4 perfect diagonals connecting tips
+  ctx.beginPath();
+  ctx.moveTo(10, h / 2);
+  ctx.lineTo(w - 10, h / 2);
+  ctx.moveTo(w / 2, 10);
+  ctx.lineTo(w / 2, h - 10);
+  ctx.moveTo(10, h / 2);
+  ctx.lineTo(w / 2, 10);
+  ctx.lineTo(w - 10, h / 2);
+  ctx.lineTo(w / 2, h - 10);
+  ctx.lineTo(10, h / 2);
+  ctx.stroke();
+
+  ctx.font = "13px Segoe UI";
+  ctx.fillStyle = "#142c52";
+  ctx.textAlign = "center";
+}
+
+// 📐 Fixed house coordinate positions
+const housePositions = [
+  [260, 460], // 1 bottom center
+  [360, 390], // 2 bottom-right
+  [430, 290], // 3 right
+  [360, 180], // 4 top-right
+  [260, 120], // 5 top
+  [160, 180], // 6 top-left
+  [90, 290],  // 7 left
+  [160, 390], // 8 bottom-left
+  [260, 290], // 9 center
+  [375, 120], // 10 inner top-right
+  [145, 120], // 11 inner top-left
+  [260, 50]   // 12 topmost
+];
+
+function drawKundli(houses, planets, asc) {
+  drawDiamond();
+
+  // 🏠 House labels
+  const houseList = Object.values(houses);
+  ctx.font = "bold 12px Segoe UI";
+  ctx.fillStyle = "#142c52";
+  for (let i = 0; i < 12; i++) {
+    const [x, y] = housePositions[i];
+    if (houseList[i]) ctx.fillText(`H${i + 1}: ${houseList[i].rashi}`, x, y);
+  }
+
+  // 🔸 Highlight Ascendant
+  const [ax, ay] = housePositions[0];
+  ctx.beginPath();
+  ctx.arc(ax, ay - 8, 7, 0, 2 * Math.PI);
+  ctx.fillStyle = "#ff6600";
+  ctx.fill();
+
+  // 🪐 Planets positions
+  ctx.font = "11px Segoe UI";
+  ctx.fillStyle = "#000";
+  for (let planet in planets) {
+    const lon = planets[planet].longitude;
+    const houseNum = Math.floor(((lon - asc + 360) % 360) / 30) + 1;
+    const [x, y] = housePositions[(houseNum - 1) % housePositions.length];
+    ctx.fillText(planet, x, y + 15);
+  }
+}
+
+// 🚀 Load Kundli Data from Backend API
+button.addEventListener("click", async () => {
+  result.textContent = "⏳ Fetching Kundli data...";
+  try {
+    const res = await fetch("http://127.0.0.1:8000/kundli?y=2009&m=4&d=12&hr=7&mn=23&lat=28.4089&lon=77.3178&tz=5.5");
+    const data = await res.json();
+    result.textContent = JSON.stringify(data, null, 2);
+    drawKundli(data.Houses, data.Planets, data.Ascendant);
+  } catch (err) {
+    result.textContent = "❌ Error: " + err;
+  }
+});
+
+drawDiamond();
+</script>
+</body>
+</html>

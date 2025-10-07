@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Kundli Generator</title>
+  <style>
+    body { font-family: Arial; background: #f8f9fa; padding: 30px; }
+    h2 { color: #2c3e50; }
+    form { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px #ccc; width: 300px; }
+    input { margin-bottom: 10px; width: 100%; padding: 5px; }
+    button { background: #007bff; color: #fff; padding: 8px 12px; border: none; border-radius: 5px; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    pre { background: #111; color: #0f0; padding: 15px; border-radius: 10px; margin-top: 20px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h2>🔮 Kundli Generator (Local API)</h2>
+
+  <form id="kundliForm">
+    <label>Date of Birth (YYYY-MM-DD)</label>
+    <input name="y" value="2009" placeholder="Year" />
+    <input name="m" value="4" placeholder="Month" />
+    <input name="d" value="12" placeholder="Day" />
+
+    <label>Time (HH:MM)</label>
+    <input name="hr" value="7" placeholder="Hour" />
+    <input name="mn" value="23" placeholder="Minute" />
+
+    <label>Latitude</label>
+    <input name="lat" value="28.4089" placeholder="Latitude" />
+
+    <label>Longitude</label>
+    <input name="lon" value="77.3178" placeholder="Longitude" />
+
+    <label>Time Zone (e.g. 5.5 for IST)</label>
+    <input name="tz" value="5.5" placeholder="Timezone" />
+
+    <button type="submit">Generate Kundli</button>
+  </form>
+
+  <h3>🪐 Result:</h3>
+  <pre id="output">No data yet...</pre>
+
+  <script>
+    const form = document.getElementById("kundliForm");
+    const output = document.getElementById("output");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      output.innerText = "⏳ Generating Kundli...";
+      try {
+        const formData = new FormData(form);
+        const params = new URLSearchParams();
+        for (const [key, value] of formData.entries()) params.append(key, value);
+
+        const res = await fetch("http://127.0.0.1:8000/kundli?" + params.toString());
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        output.innerText = JSON.stringify(data, null, 2);
+      } catch (err) {
+        output.innerText = "❌ Error: " + err;
+        console.error(err);
+      }
+    });
+  </script>
+</body>
+</html>
