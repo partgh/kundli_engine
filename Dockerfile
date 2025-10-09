@@ -7,15 +7,15 @@ RUN apt-get update && apt-get install -y \
     wget \
     libsqlite3-0 \
     libsqlite3-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and build Swiss Ephemeris manually
-RUN wget https://www.astro.com/ftp/swisseph/swe_unix_src_2.11.03.tar.gz && \
-    tar -xzf swe_unix_src_2.11.03.tar.gz && \
+# Clone and build Swiss Ephemeris from GitHub mirror
+RUN git clone https://github.com/aloistr/swisseph.git && \
     cd swisseph && \
     make libswe.a && make libswe.so && \
     cp libswe.so /usr/lib/ && \
-    cd .. && rm -rf swisseph swe_unix_src_2.11.03.tar.gz
+    cd .. && rm -rf swisseph
 
 # Set working directory
 WORKDIR /app
@@ -26,7 +26,7 @@ COPY . /app
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose port (Railway assigns automatically)
+# Expose app port
 EXPOSE 8000
 
 # Start FastAPI app
