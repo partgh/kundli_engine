@@ -4,29 +4,28 @@ from fastapi.responses import FileResponse
 import swisseph as swe
 from datetime import datetime, timedelta
 import requests
-import os
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 
-app = FastAPI(title="Kundli API", version="5.0")
+app = FastAPI(title="Kundli API", version="5.1")
 
 # ───────────────────────────────
 # ✅ Enable CORS for frontend access
 # ───────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins (frontend can access)
+    allow_origins=["*"],  # allow all origins for frontend access
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ───────────────────────────────
-# Helper Functions
+# 🔹 Helper Functions
 # ───────────────────────────────
 
 def get_city_location(city_name: str):
-    """Fetch latitude & longitude for given city using OpenCage API"""
+    """Fetch latitude & longitude for a city using OpenCage API"""
     api_key = "a2392dd959374245a15a09595501b3c9"
     url = f"https://api.opencagedata.com/geocode/v1/json?q={city_name}&key={api_key}"
     response = requests.get(url).json()
@@ -43,54 +42,69 @@ def get_city_location(city_name: str):
 
 
 def get_rashi_lord(longitude):
-    """Return zodiac sign & its lord"""
-    rashis = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"]
-    lords = ["Mars","Venus","Mercury","Moon","Sun","Mercury","Venus","Mars","Jupiter","Saturn","Saturn","Jupiter"]
-    sign_index = int(longitude // 30) % 12
+    """Return zodiac sign and its lord"""
+    rashis = [
+        "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
+        "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"
+    ]
+    lords = [
+        "Mars", "Venus", "Mercury", "Moon", "Sun", "Mercury",
+        "Venus", "Mars", "Jupiter", "Saturn", "Saturn", "Jupiter"
+    ]
+    sign_index = int((longitude % 360) // 30)
     return rashis[sign_index], lords[sign_index]
 
 
 def get_kp_lords(longitude):
-    """Return KP Star Lord & Sub Lord (simplified)"""
-    nakshatra_lords = ["Ketu","Venus","Sun","Moon","Mars","Rahu","Jupiter","Saturn","Mercury"]
-    nak_index = int((longitude % 360) / (13.3333 / 9)) % 9
+    """Return KP Star Lord and Sub Lord (simplified)"""
+    nakshatra_lords = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"]
+    total_deg = longitude % 360
+    nak_index = int((total_deg / 13.3333)) % 9
     star_lord = nakshatra_lords[nak_index]
     sub_lord = nakshatra_lords[(nak_index + 3) % 9]
     return star_lord, sub_lord
 
 # ───────────────────────────────
-# API ENDPOINTS
+# 🔹 Endpoints
 # ───────────────────────────────
 
 @app.get("/")
 def home():
     return {"message": "🔮 Kundli Engine API is Running Successfully!"}
 
-# ─────────────── /city ───────────────
+
 @app.get("/city")
 def city_lookup(city: str):
+    """Get latitude and longitude by city"""
     location = get_city_location(city)
     if not location:
         return {"error": "City not found."}
     return location
 
-# ─────────────── /kundli ───────────────
+
 @app.get("/kundli")
 def kundli(y: int, m: int, d: int, hr: int, mn: int, city: str, tz: float):
+    """Generate kundli planetary and house details"""
     location = get_city_location(city)
     if not location:
         return {"error": "Invalid city or location not found."}
 
     lat, lon = location["Latitude"], location["Longitude"]
-    utc_time = datetime(y, m, d, hr, mn) - timedelta(hours=tz)
-    jd = swe.julday(utc_time.year, utc_time.month, utc_time.day,
-                    utc_time.hour + utc_time.minute / 60)
 
-    # Ascendant calculation
+    # ✅ Timezone and precision fix
+    utc_time = datetime(y, m, d, hr, mn) - timedelta(hours=float(tz))
+    jd = swe.julday(
+        utc_time.year,
+        utc_time.month,
+        utc_time.day,
+        utc_time.hour + utc_time.minute / 60 + utc_time.second / 3600
+    )
+
+    # ✅ Houses & Ascendant calculation
     houses, ascmc = swe.houses(jd, lat, lon)
     ascendant = round(ascmc[0], 2)
 
-    # ✅ Planets calculation (with Rahu & Ketu fix)
+    # ✅ Planets (with accurate Rahu-Ketu correction)
     planets = {
         "Sun": swe.SUN,
         "Moon": swe.MOON,
@@ -110,13 +124,21 @@ def kundli(y: int, m: int, d: int, hr: int, mn: int, city: str, tz: float):
         if p == "Ketu":
             lon_val = (lon_val + 180) % 360
         rashi, lord = get_rashi_lord(lon_val)
-        planet_data[p] = {"longitude": round(lon_val, 2), "rashi": rashi, "lord": lord}
+        planet_data[p] = {
+            "longitude": round(lon_val, 2),
+            "rashi": rashi,
+            "lord": lord
+        }
 
-    # Houses
+    # ✅ Houses Data
     house_data = {}
     for i, h in enumerate(houses, 1):
         rashi, lord = get_rashi_lord(h)
-        house_data[f"House_{i}"] = {"degree": round(h, 2), "rashi": rashi, "lord": lord}
+        house_data[f"House_{i}"] = {
+            "degree": round(h, 2),
+            "rashi": rashi,
+            "lord": lord
+        }
 
     return {
         "Local_Time_IST": f"{y}-{m:02d}-{d:02d} {hr:02d}:{mn:02d}",
@@ -127,15 +149,16 @@ def kundli(y: int, m: int, d: int, hr: int, mn: int, city: str, tz: float):
         "Houses": house_data
     }
 
-# ─────────────── /dasha ───────────────
+
 @app.get("/dasha")
 def dasha(y: int, m: int, d: int, hr: int, mn: int, city: str, tz: float):
+    """Generate Vimshottari Dasha periods"""
     location = get_city_location(city)
     if not location:
         return {"error": "Invalid city or location not found."}
 
     lat, lon = location["Latitude"], location["Longitude"]
-    utc_time = datetime(y, m, d, hr, mn) - timedelta(hours=tz)
+    utc_time = datetime(y, m, d, hr, mn) - timedelta(hours=float(tz))
     jd = swe.julday(utc_time.year, utc_time.month, utc_time.day,
                     utc_time.hour + utc_time.minute / 60)
 
@@ -143,7 +166,7 @@ def dasha(y: int, m: int, d: int, hr: int, mn: int, city: str, tz: float):
     moon_lon = moon_lon[0] if isinstance(moon_lon, tuple) else moon_lon
 
     nak_index = int((moon_lon % 360) / 13.3333)
-    nak_lords = ["Ketu","Venus","Sun","Moon","Mars","Rahu","Jupiter","Saturn","Mercury"]
+    nak_lords = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"]
     moon_lord = nak_lords[nak_index % 9]
     dasha_order = nak_lords[nak_lords.index(moon_lord):] + nak_lords[:nak_lords.index(moon_lord)]
 
@@ -151,22 +174,32 @@ def dasha(y: int, m: int, d: int, hr: int, mn: int, city: str, tz: float):
     vim_dasha = []
     start_date = base_date
     for lord in dasha_order:
-        years = {"Ketu":7,"Venus":20,"Sun":6,"Moon":10,"Mars":7,"Rahu":18,"Jupiter":16,"Saturn":19,"Mercury":17}[lord]
-        end_date = start_date + timedelta(days=years*365.25)
-        vim_dasha.append({"Planet": lord, "Start_Date": start_date.date(), "End_Date": end_date.date(), "Years": years})
+        years = {"Ketu": 7, "Venus": 20, "Sun": 6, "Moon": 10, "Mars": 7, "Rahu": 18, "Jupiter": 16, "Saturn": 19, "Mercury": 17}[lord]
+        end_date = start_date + timedelta(days=years * 365.25)
+        vim_dasha.append({
+            "Planet": lord,
+            "Start_Date": start_date.date(),
+            "End_Date": end_date.date(),
+            "Years": years
+        })
         start_date = end_date
 
-    return {"Birth_Moon_Longitude": moon_lon, "Nakshatra_Lord": moon_lord, "Vimshottari_Dasha": vim_dasha}
+    return {
+        "Birth_Moon_Longitude": round(moon_lon, 2),
+        "Nakshatra_Lord": moon_lord,
+        "Vimshottari_Dasha": vim_dasha
+    }
 
-# ─────────────── /kp_kundli ───────────────
+
 @app.get("/kp_kundli")
 def kp_kundli(y: int, m: int, d: int, hr: int, mn: int, city: str, tz: float):
+    """Generate KP Kundli with Sign, Star, Sub Lords"""
     location = get_city_location(city)
     if not location:
         return {"error": "Invalid city or location not found."}
 
     lat, lon = location["Latitude"], location["Longitude"]
-    utc_time = datetime(y, m, d, hr, mn) - timedelta(hours=tz)
+    utc_time = datetime(y, m, d, hr, mn) - timedelta(hours=float(tz))
     jd = swe.julday(utc_time.year, utc_time.month, utc_time.day,
                     utc_time.hour + utc_time.minute / 60)
 
@@ -190,26 +223,41 @@ def kp_kundli(y: int, m: int, d: int, hr: int, mn: int, city: str, tz: float):
             lon_val = (lon_val + 180) % 360
         rashi, sign_lord = get_rashi_lord(lon_val)
         star_lord, sub_lord = get_kp_lords(lon_val)
-        kp_planets[p] = {"Longitude": round(lon_val, 2), "Rashi": rashi,
-                         "Sign_Lord": sign_lord, "Star_Lord": star_lord, "Sub_Lord": sub_lord}
+        kp_planets[p] = {
+            "Longitude": round(lon_val, 2),
+            "Rashi": rashi,
+            "Sign_Lord": sign_lord,
+            "Star_Lord": star_lord,
+            "Sub_Lord": sub_lord
+        }
 
     houses, ascmc = swe.houses(jd, lat, lon)
     kp_houses = {}
     for i, h in enumerate(houses, 1):
         rashi, sign_lord = get_rashi_lord(h)
         star_lord, sub_lord = get_kp_lords(h)
-        kp_houses[f"House_{i}"] = {"Degree": round(h, 2), "Rashi": rashi,
-                                   "Sign_Lord": sign_lord, "Star_Lord": star_lord, "Sub_Lord": sub_lord}
+        kp_houses[f"House_{i}"] = {
+            "Degree": round(h, 2),
+            "Rashi": rashi,
+            "Sign_Lord": sign_lord,
+            "Star_Lord": star_lord,
+            "Sub_Lord": sub_lord
+        }
 
-    return {"Local_Time_IST": f"{y}-{m:02d}-{d:02d} {hr:02d}:{mn:02d}",
-            "KP_Planets": kp_planets, "KP_Houses": kp_houses}
+    return {
+        "Local_Time_IST": f"{y}-{m:02d}-{d:02d} {hr:02d}:{mn:02d}",
+        "KP_Planets": kp_planets,
+        "KP_Houses": kp_houses
+    }
 
-# ─────────────── /pdf_kundli ───────────────
+
 @app.get("/pdf_kundli")
 def generate_pdf(y: int, m: int, d: int, hr: int, mn: int, city: str, tz: float):
+    """Generate downloadable PDF Kundli report"""
     location = get_city_location(city)
     if not location:
         return {"error": "Invalid city or location not found."}
+
     lat, lon = location["Latitude"], location["Longitude"]
     kundli_data = kundli(y, m, d, hr, mn, city, tz)
     file_path = f"kundli_report_{city}.pdf"
